@@ -1,0 +1,431 @@
+Regressão múltipla_análise_PCGP.ipynb
+
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from matplotlib.pyplot import subplots
+import matplotlib.pyplot as plt
+from statsmodels.stats.diagnostic import het_breuschpagan
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+from statsmodels.tools.tools import add_constant
+from scipy.stats import shapiro
+from scipy.stats import spearmanr
+
+
+
+# Importação dos Dados
+
+# Carregando o conjunto de dados do arquivo Excel
+dados = pd.read_excel('dados-para-regressão-multipla.xlsx')
+dados
+
+## Categorização das variáveis independentes
+
+#Transformar Idade em Categórica
+bins = [49, 54, 59, 64, 69, 74, 79, 84, 89, np.inf]
+labels = ['50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80-84', '85-89', '90+']
+dados['Idade_Categórica'] = pd.cut(dados['idade'], bins=bins, labels=labels)
+
+# Categorizar Educação
+def categorizar_educ(e22):
+    if e22 == 1:
+        return 'Analfabeto'
+    elif 2 <= e22 <= 4:
+        return 'Menos que Ensino Fundamental'
+    elif 5 <= e22 <= 7:
+        return 'Ensino Fundamental Completo'
+    elif 8 <= e22 <= 10:
+        return 'Ensino Médio Incompleto'
+    elif 11 <= e22 <= 15:
+        return 'Ensino Médio Completo'
+    elif e22 >= 16:
+        return 'Ensino Superior ou Mais'
+    else:
+        return 'Outros'
+
+dados['Educ_Categórica'] = dados['e22'].apply(categorizar_educ)
+
+dados
+
+# Inspeção Inicial
+
+## Formato dos dados
+
+print(dados.info())
+print(dados.isnull().sum())
+
+## Identificação de Outliers
+
+sns.boxplot(data=dados['sexo'])
+
+sns.boxplot(data=dados['Idade_Categórica'])
+
+sns.boxplot(data=dados['Educ_Categórica'])
+
+sns.boxplot(data=dados['pont-cog-glob-padr'])
+
+# Análise Exploratória e Pré-Testes
+
+
+## Verificação da Linearidade
+
+# Criando os gráficos de dispersão
+plt.figure(figsize=(12, 5))
+
+# Gráfico 1: Idade vs Pontuação Cognitiva
+plt.subplot(1, 2, 1)
+plt.scatter(dados['idade'], dados['pont-cog-glob-padr'], color='black', alpha=0.7)
+plt.title('Idade vs Pontuação Cognitiva')
+plt.xlabel('Idade')
+plt.ylabel('Pontuação Cognitiva Global Padronizada')
+
+# Gráfico 2: Educação vs Pontuação Cognitiva
+plt.subplot(1, 2, 2)
+plt.scatter(dados['e22'], dados['pont-cog-glob-padr'], color='green', alpha=0.7)
+plt.title('Educação vs Pontuação Cognitiva')
+plt.xlabel('Educação')
+plt.ylabel('Pontuação Cognitiva Global Padronizada')
+
+# Exibindo os gráficos
+plt.tight_layout()
+plt.show()
+
+# Gráfico de dispersão com linha de tendência
+sns.lmplot(x='idade', y='pont-cog-glob-padr', data=dados, ci=None, scatter_kws={'color': 'blue'}, line_kws={'color': 'red'})
+sns.lmplot(x='e22', y='pont-cog-glob-padr', data=dados, ci=None, scatter_kws={'color': 'blue'}, line_kws={'color': 'red'})
+# Adicionar título
+plt.title('Gráfico de Dispersão com Linha de Tendência')
+# Mostrar o gráfico
+plt.show()
+
+## Teste de correlação de Spearman
+# 1: Correlação perfeita positiva ou direta. -1: Correlação perfeita negativa ou inversamente proporcional. 0: Ausência de correlação.
+
+# Selecionando preditoras e variável resposta
+w = dados[["sexo", "Idade_Categórica", "Educ_Categórica"]]
+z = dados["pont-cog-glob-padr"]
+
+# Calculando a matriz de correlação de Spearman
+correlation_matrix = pd.DataFrame(index=w.columns, columns=["pont-cog-glob-padr"], dtype=float)
+p_value_matrix = pd.DataFrame(index=w.columns, columns=["pont-cog-glob-padr"], dtype=float)
+
+# Preenchendo as matrizes com coeficientes e p-valores
+for col in w.columns:
+    coef, p_value = spearmanr(w[col], z)
+    correlation_matrix.loc[col, "pont-cog-glob-padr"] = coef
+    p_value_matrix.loc[col, "pont-cog-glob-padr"] = p_value
+
+# Formatando a saída dos p-valores para o formato numérico padrão
+pd.options.display.float_format = '{:.10f}'.format  # Configura o pandas para exibir floats no formato padrão
+
+# Exibindo os resultados
+print("Matriz de Correlação (Spearman):")
+print(correlation_matrix)
+
+print("\nMatriz de P-valores:")
+print(p_value_matrix)
+
+# Regressão Linear Múltipla
+
+## Transformando em variáveis dummies
+
+# Criar Dummies para Idade
+dummies_idade = pd.get_dummies(dados['Idade_Categórica'], prefix='idade', drop_first=True)
+
+#  Criar Dummies para Educação Categorizada
+dummies_educacao = pd.get_dummies(dados['Educ_Categórica'], prefix='educ')
+
+# Remover a coluna correspondente à categoria 18 (doutorado) para usá-la como referência
+if 'educ_18' in dummies_educacao.columns:
+    dummies_educacao = dummies_educacao.drop(columns=['educ_18'])
+
+# Combinar tudo em um único DataFrame
+dados_dummies = pd.concat([dados, dummies_idade, dummies_educacao], axis=1)
+
+# Combinar tudo em um único DataFrame
+dados_dummies = pd.concat([dados, dummies_idade, dummies_educacao], axis=1)
+
+# Exibir o DataFrame final
+#dados_dummies.head()
+
+print(dados_dummies.info())
+
+dados_dummies
+
+## Modelo
+
+# Removemos as colunas originais de Idade e Educação e usamos apenas as dummies
+X_1 = dados_dummies.drop(columns=['idade', 'e22','sexo', 'Idade_Categórica','Educ_Categórica', 'pont-cog-glob-padr'])
+y_1 = dados_dummies['pont-cog-glob-padr']
+
+# Garantir que todas as colunas de X sejam numéricas
+X_1 = X_1.astype(float)
+
+# Adicionar o intercepto manualmente
+X_1 = sm.add_constant(X_1)
+
+# Ajustar o modelo com statsmodels
+model_1 = sm.OLS(y_1, X_1).fit()
+# Resumo do modelo
+print(model_1.summary())
+
+# Removemos as colunas originais de Idade e Educação e usamos apenas as dummies
+X_2 = dados_dummiesX_1 = dados_dummies.drop(columns=['idade', 'e22','sexo', 'Idade_Categórica','Educ_Categórica', 'pont-cog-glob-padr', 'idade_55-59',  'idade_60-64', 'idade_65-69'])
+y_2 = dados_dummies['pont-cog-glob-padr']
+
+# Garantir que todas as colunas de X sejam numéricas
+X_2 = X_2.astype(float)
+
+# Adicionar o intercepto manualmente
+X_2 = sm.add_constant(X_2)
+
+# Ajustar o modelo com statsmodels
+model_2 = sm.OLS(y_2, X_2).fit()
+# Resumo do modelo
+print(model_2.summary())
+
+# Removemos as colunas originais de Idade e Educação e usamos apenas as dummies
+X_3 = dados_dummiesX_1 = dados_dummies.drop(columns=['idade', 'e22','sexo', 'Idade_Categórica','Educ_Categórica', 'pont-cog-glob-padr', 'idade_55-59',  'idade_60-64', 'idade_65-69', 'idade_90+'])
+y_3 = dados_dummies['pont-cog-glob-padr']
+
+# Garantir que todas as colunas de X sejam numéricas
+X_3 = X_3.astype(float)
+
+# Adicionar o intercepto manualmente
+X_3 = sm.add_constant(X_3)
+
+# Ajustar o modelo com statsmodels
+model_3 = sm.OLS(y_3, X_3).fit()
+# Resumo do modelo
+print(model_3.summary())
+
+# Predições e resíduos
+predicoes = model_3.predict(X_3)
+residuos_3 = model_3.resid
+
+# Plotando os resíduos em relação às predições
+plt.scatter(predicoes, residuos_3, alpha=0.7)
+plt.axhline(0, color='red', linestyle='--', linewidth=1)
+plt.xlabel("Predições")
+plt.ylabel("Resíduos")
+plt.title("Resíduos vs Predições")
+plt.show()
+
+### teste de Breusch-Pagan
+
+
+
+# Teste de Breusch-Pagan
+bp_test = het_breuschpagan(residuos_3, X_3)
+
+# Resultados do teste
+labels = ['LM Statistic', 'LM-Test p-value']
+for label, value in zip(labels, bp_test):
+    print(f"{label}: {value}")
+
+## Análise de Colinearidade
+
+#VIF < 5: Baixa colinearidade. VIF >= 5: Colinearidade moderada. VIF >= 10: Colinearidade alta.
+
+
+# Adicionando uma constante para o cálculo do VIF
+x = sm.add_constant(X_3)
+
+# Calculando o VIF para cada preditor
+vif_data = pd.DataFrame()
+vif_data["Variável"] = x.columns
+vif_data["VIF"] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
+
+# Exibindo os resultados
+print(vif_data)
+
+## Gráfico Quantil-Quantil (Q-Q) & Teste de Normalidade (Shapiro-Wilk)
+
+# Criando o gráfico Q-Q
+sm.qqplot(residuos_3, line='45', fit=True)
+plt.title('Gráfico Q-Q dos Resíduos')
+plt.show()
+
+# Realizar o teste de Shapiro-Wilk para verificar a normalidade dos resíduos
+stat, p_valor = shapiro(residuos_3)
+
+# Exibir os resultados do teste de Shapiro-Wilk
+print("\nTeste de Shapiro-Wilk:")
+print("Estatística do teste:", stat)
+print("p-valor:", p_valor)
+
+# Interpretar o resultado
+if p_valor < 0.05:
+    print("Os resíduos NÃO seguem uma distribuição normal (p < 0.05).")
+else:
+    print("Os resíduos seguem uma distribuição normal (p >= 0.05).")
+
+print("Média dos residuos:")
+residuos.mean()
+
+## Desvio Pradrão dos Resíduos
+
+# Calcular o desvio padrão dos resíduos
+desvio_padrao_residuos = np.sqrt(np.sum(residuos_3**2) / model_3.df_resid)
+
+print(f"Desvio padrão dos resíduos: {desvio_padrao_residuos:.4f}")
+
+# Calculo dos valores previstos para toda amostra
+
+# Carregando o conjunto de dados do arquivo Excel
+dados_amostra_completa = pd.read_excel('idade e educação.xlsx')
+# Visualizar as primeiras linhas do conjunto de dados
+#dados_amostra_completa
+
+#Mapear as categorias de idade e educação para as dummies
+# Criar categorias de idade
+bins = [49, 54, 59, 64, 69, 74, 79, 84, 89, np.inf]
+labels = ['50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80-84', '85-89', '90+']
+dados_amostra_completa['Idade_Categórica'] = pd.cut(dados_amostra_completa['idade'], bins=bins, labels=labels)
+
+# Categorizar Educação
+def categorizar_educ(e22):
+    if e22 == 1:
+        return 'Analfabeto'
+    elif 2 <= e22 <= 4:
+        return 'Menos que Ensino Fundamental'
+    elif 5 <= e22 <= 8:
+        return 'Ensino Fundamental Completo'
+    elif 9 <= e22 <= 11:
+        return 'Ensino Médio Incompleto'
+    elif 12 <= e22 <= 14:
+        return 'Ensino Médio Completo'
+    elif e22 >= 15:
+        return 'Ensino Superior ou Mais'
+    else:
+        return 'Outros'
+
+dados_amostra_completa['Educ_Categórica'] = dados_amostra_completa['e22'].apply(categorizar_educ)
+
+# Criar dummies para idade
+dummies_idade_2 = pd.get_dummies(dados_amostra_completa['Idade_Categórica'], prefix='idade')
+
+# Criar dummies para educação
+dummies_educ_2 = pd.get_dummies(dados_amostra_completa['Educ_Categórica'], prefix='e22')
+
+# Combinar tudo em um único DataFrame
+dados_expandido = pd.concat([dados_amostra_completa, dummies_idade_2, dummies_educ_2], axis=1)
+
+# Definir os coeficientes da regressão (obtidos da subamostra normativa)
+coeficientes = {
+    'const': 0.0064,
+    'idade_70-74': -0.1998,
+    'idade_75-79': -0.5048,
+    'idade_80-84': -0.7501,
+    'idade_85-89': -1.3710,
+    'educ_Analfabeto ': -1.1430,
+    'educ_Ensino Fundamental Completo ': -0.1127,
+    'educ_Ensino Médio Completo ': -0.4991,
+    'educ_Ensino Médio Incompleto ': -0.1455,
+    'educ_Ensino Superior ou Mais ': -1.0078,
+    'educ_Menos que Ensino Fundamental ': -0.3904,
+}
+
+# Calcular os valores previstos
+# Inicializar os valores previstos com o intercepto
+dados_expandido['Valor_Previsto'] = coeficientes['const']
+
+# Adicionar os efeitos das dummies de idade
+for coluna in dummies_idade_2.columns:
+    if coluna in coeficientes:
+        dados_expandido['Valor_Previsto'] += dados_expandido[coluna] * coeficientes[coluna]
+
+# Adicionar os efeitos das dummies de educação
+for coluna in dummies_educ_2.columns:
+    if coluna in coeficientes:
+        dados_expandido['Valor_Previsto'] += dados_expandido[coluna] * coeficientes[coluna]
+
+# Passo 5: Exibir os resultados
+print(dados_expandido[['idade', 'e22', 'Valor_Previsto']])
+
+# Criar um DataFrame com as colunas relevantes
+resultados_finais = dados_expandido[['idade',
+                                   'e22',
+                                   'Idade_Categórica',
+                                   'Educ_Categórica',
+                                   'Valor_Previsto']].copy()
+
+# Arredondar o Valor_Previsto para 4 casas decimais para melhor visualização
+resultados_finais['Valor_Previsto'] = resultados_finais['Valor_Previsto']
+
+# Salvar em um novo arquivo Excel
+resultados_finais.to_excel("resultados_finais.xlsx", index=False)
+print("Subamostra salva no arquivo 'subamostra_extraida.xlsx'")
+
+# Transferindo os dados do IQ-CODE para completar a variável alvo
+
+# Carregar o conjunto de dados do arquivo Excel
+df = pd.read_excel('teste IQ-CODE.xlsx')
+
+# Visualizar as primeiras linhas do conjunto de dados
+df
+
+# Verificando se as colunas são idênticas
+sao_iguais = df['id'].equals(df['id.1'])
+
+# Encontrando diferenças, se houverem
+if not sao_iguais:
+    # Criar máscara para identificar onde há diferenças
+    diferentes = df['id'] != df['id.1']
+
+    # Mostrar apenas as linhas onde há diferenças
+    diferencas = df[diferentes][['id', 'id.1']]
+
+    print("Foram encontradas diferenças nas seguintes linhas:")
+    print(diferencas)
+    print(f"\nTotal de diferenças encontradas: {len(diferencas)}")
+else:
+    print("As colunas são idênticas!")
+
+# Informações adicionais
+print("\nInformações adicionais:")
+print(f"Número total de linhas: {len(df)}")
+print("\nValores únicos em 'id':", len(df['id'].unique()))
+print("Valores únicos em 'id.1':", len(df['id.1'].unique()))
+
+# Verificar se há valores ausentes (NA)
+print("\nValores ausentes:")
+print(df[['id', 'id.1']].isnull().sum())
+
+# Carregar a planilha principal com os IDs e pontuações (substitua 'planilha_principal.xlsx' pelo nome do arquivo)
+df_pcg = pd.read_excel("PCG.xlsx")
+
+# Carregar a planilha com os dados adicionais para preenchimento (substitua 'dados_adicionais.xlsx' pelo nome do arquivo)
+df_iq = pd.read_excel("IQ.xlsx")
+
+# Exibir informações básicas para verificar os dados carregados
+print("Planilha PCG antes do preenchimento:")
+print(df_pcg.head())
+print("\nPlanilha IQ:")
+print(df_iq.head())
+
+print(df_pcg.isnull().sum())
+
+print(df_iq.isnull().sum())
+
+# Garantir que as colunas de ID sejam do mesmo tipo
+df_pcg['id'] = df_pcg['id'].astype(int)
+df_iq['id'] = df_iq['id'].astype(int)
+
+# Criar um dicionário de preenchimento com base na planilha IQ
+dados_para_preencher = pd.Series(df_iq['Classificação'].values, index=df_iq['id']).to_dict()
+
+# Preencher os valores ausentes na coluna 'classificacao' da planilha PCG
+df_pcg['pontuacao'] = df_pcg.apply(
+    lambda row: dados_para_preencher[row['id']] if pd.isnull(row['classificacao']) and row['id'] in dados_para_preencher else row['classificacao'],
+    axis=1
+)
+
+# Verificar novamente se há valores nulos após o preenchimento
+print(f"Linhas com pontuações vazias após preenchimento: {df_pcg['classificacao'].isnull().sum()}")
+
+# Salvar a planilha atualizada em um novo arquivo
+df_pcg.to_excel("PCG_preenchida.xlsx", index=False)
+
+print("Preenchimento concluído! A nova planilha foi salva como 'PCG_preenchida.xlsx'.")
