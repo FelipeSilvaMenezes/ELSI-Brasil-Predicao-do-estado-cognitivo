@@ -70,7 +70,7 @@ sns.boxplot(data=dados['pont-cog-glob-padr'])
 
 ## Verificação da Linearidade
 
-# Criando os gráficos de dispersão
+# Gráficos de dispersão
 plt.figure(figsize=(12, 5))
 
 # Gráfico 1: Idade vs Pontuação Cognitiva
@@ -214,8 +214,6 @@ plt.show()
 
 ### teste de Breusch-Pagan
 
-
-
 # Teste de Breusch-Pagan
 bp_test = het_breuschpagan(residuos_3, X_3)
 
@@ -266,12 +264,12 @@ residuos.mean()
 
 ## Desvio Pradrão dos Resíduos
 
-# Calcular o desvio padrão dos resíduos
+# Calculando o desvio padrão dos resíduos
 desvio_padrao_residuos = np.sqrt(np.sum(residuos_3**2) / model_3.df_resid)
 
 print(f"Desvio padrão dos resíduos: {desvio_padrao_residuos:.4f}")
 
-# Calculo dos valores previstos para toda amostra
+# Calculo dos valores previstos para toda a amostra
 
 # Carregando o conjunto de dados do arquivo Excel
 dados_amostra_completa = pd.read_excel('idade e educação.xlsx')
@@ -341,7 +339,7 @@ for coluna in dummies_educ_2.columns:
     if coluna in coeficientes:
         dados_expandido['Valor_Previsto'] += dados_expandido[coluna] * coeficientes[coluna]
 
-# Passo 5: Exibir os resultados
+# Exibir os resultados
 print(dados_expandido[['idade', 'e22', 'Valor_Previsto']])
 
 # Criar um DataFrame com as colunas relevantes
@@ -358,7 +356,7 @@ resultados_finais['Valor_Previsto'] = resultados_finais['Valor_Previsto']
 resultados_finais.to_excel("resultados_finais.xlsx", index=False)
 print("Subamostra salva no arquivo 'subamostra_extraida.xlsx'")
 
-# Transferindo os dados do IQ-CODE para completar a variável alvo
+# Transferindo os dados do IQ-CODE para completar informações sobre estado congitivo "Target"
 
 # Carregar o conjunto de dados do arquivo Excel
 df = pd.read_excel('teste IQ-CODE.xlsx')
@@ -393,10 +391,10 @@ print("Valores únicos em 'id.1':", len(df['id.1'].unique()))
 print("\nValores ausentes:")
 print(df[['id', 'id.1']].isnull().sum())
 
-# Carregar a planilha principal com os IDs e pontuações (substitua 'planilha_principal.xlsx' pelo nome do arquivo)
+# Carregar a planilha principal com os IDs e pontuações
 df_pcg = pd.read_excel("PCG.xlsx")
 
-# Carregar a planilha com os dados adicionais para preenchimento (substitua 'dados_adicionais.xlsx' pelo nome do arquivo)
+# Carregar a planilha com os dados adicionais para preenchimento
 df_iq = pd.read_excel("IQ.xlsx")
 
 # Exibir informações básicas para verificar os dados carregados
@@ -427,5 +425,3 @@ print(f"Linhas com pontuações vazias após preenchimento: {df_pcg['classificac
 
 # Salvar a planilha atualizada em um novo arquivo
 df_pcg.to_excel("PCG_preenchida.xlsx", index=False)
-
-print("Preenchimento concluído! A nova planilha foi salva como 'PCG_preenchida.xlsx'.")
